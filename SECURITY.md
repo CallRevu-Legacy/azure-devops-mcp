@@ -37,3 +37,33 @@ We prefer all communications to be in English.
 ## Policy
 
 Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https://aka.ms/security.md/cvd).
+
+## Remote Server Security Considerations
+
+When deploying the Azure DevOps MCP Server in remote mode (HTTP+SSE), additional security considerations apply:
+
+### Authentication & Authorization
+
+- **Entra ID Token Validation**: The current implementation decodes JWT tokens but does not perform full cryptographic validation. In production deployments, implement proper JWT validation using Microsoft authentication libraries.
+- **PAT Storage**: Personal Access Tokens are encrypted at rest using AES-256-GCM encryption. The encryption key must be stored securely in Azure Key Vault.
+- **User Isolation**: Each user's requests are executed using their own Personal Access Token, ensuring proper Azure DevOps access controls are enforced.
+
+### Network Security
+
+- **HTTPS Only**: Always use HTTPS in production. Azure App Service provides managed SSL certificates.
+- **CORS Configuration**: Configure `ALLOWED_ORIGINS` environment variable to restrict which domains can access the server.
+- **Private Endpoints**: Consider using Azure Private Endpoints to restrict network access to the server.
+
+### Key Management
+
+- **Encryption Key Rotation**: Periodically rotate encryption keys. Note that rotating keys requires re-encrypting all stored PATs.
+- **Key Vault Integration**: Store encryption keys in Azure Key Vault with appropriate access policies.
+- **Audit Logging**: Enable Azure Monitor and Key Vault audit logging to track access patterns.
+
+### Monitoring
+
+- **Application Insights**: Enable Application Insights for monitoring and alerting on authentication failures.
+- **Failed Authentication Tracking**: Monitor for repeated authentication failures which may indicate an attack.
+- **Anomaly Detection**: Use Azure Security Center to detect unusual access patterns.
+
+For more details, see the [Remote Deployment Guide](./docs/REMOTE-DEPLOYMENT.md).
