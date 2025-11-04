@@ -90,39 +90,38 @@ function getAzureDevOpsClient(getAzureDevOpsToken: () => Promise<string>, userAg
 }
 
 async function main() {
-  // Check if we should run in remote mode
   if (argv.remote) {
+    // Run as remote HTTP server with Streamable HTTP transport
     console.log("Starting Azure DevOps MCP Server in remote mode...");
     const remoteServer = new RemoteMcpServer(orgName, argv.domains as string[]);
     await remoteServer.start(argv.port);
-    return;
+  } else {
+    // Run as local server with stdio transport
+    const server = new McpServer({
+      name: "Azure DevOps MCP Server",
+      version: packageVersion,
+      icons: [
+        {
+          src: "https://cdn.vsassets.io/content/icons/favicon.ico",
+        },
+      ],
+    });
+
+    const userAgentComposer = new UserAgentComposer(packageVersion);
+    server.server.oninitialized = () => {
+      userAgentComposer.appendMcpClientInfo(server.server.getClientVersion());
+    };
+    const tenantId = (await getOrgTenant(orgName)) ?? argv.tenant;
+    const authenticator = createAuthenticator(argv.authentication, tenantId);
+
+    // removing prompts untill further notice
+    // configurePrompts(server);
+
+    configureAllTools(server, authenticator, getAzureDevOpsClient(authenticator, userAgentComposer), () => userAgentComposer.userAgent, enabledDomains);
+
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
   }
-
-  // Run in local stdio mode
-  const server = new McpServer({
-    name: "Azure DevOps MCP Server",
-    version: packageVersion,
-    icons: [
-      {
-        src: "https://cdn.vsassets.io/content/icons/favicon.ico",
-      },
-    ],
-  });
-
-  const userAgentComposer = new UserAgentComposer(packageVersion);
-  server.server.oninitialized = () => {
-    userAgentComposer.appendMcpClientInfo(server.server.getClientVersion());
-  };
-  const tenantId = (await getOrgTenant(orgName)) ?? argv.tenant;
-  const authenticator = createAuthenticator(argv.authentication, tenantId);
-
-  // removing prompts untill further notice
-  // configurePrompts(server);
-
-  configureAllTools(server, authenticator, getAzureDevOpsClient(authenticator, userAgentComposer), () => userAgentComposer.userAgent, enabledDomains);
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
 }
 
 main().catch((error) => {
