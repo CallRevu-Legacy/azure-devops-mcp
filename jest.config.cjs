@@ -50,5 +50,7 @@ module.exports = {
     "^(.+)/version\\.js$": "$1/version.ts",
     "^(.+)/utils\\.js$": "$1/utils.ts",
     "^(.+)/auth\\.js$": "$1/auth.ts",
+    "^(.+)/encryption\\.js$": "$1/encryption.ts",
+    "^(.+)/pat-storage\\.js$": "$1/pat-storage.ts",
   },
 };

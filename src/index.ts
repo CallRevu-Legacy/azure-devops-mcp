@@ -16,6 +16,7 @@ import { configureAllTools } from "./tools.js";
 import { UserAgentComposer } from "./useragent.js";
 import { packageVersion } from "./version.js";
 import { DomainsManager } from "./shared/domains.js";
+import { RemoteMcpServer } from "./remote-server.js";
 
 function isGitHubCodespaceEnv(): boolean {
   return process.env.CODESPACES === "true" && !!process.env.CODESPACE_NAME;
@@ -54,6 +55,18 @@ const argv = yargs(hideBin(process.argv))
     describe: "Azure tenant ID (optional, applied when using 'interactive' and 'azcli' type of authentication)",
     type: "string",
   })
+  .option("remote", {
+    alias: "r",
+    describe: "Run as remote server (HTTP+SSE) instead of local stdio mode",
+    type: "boolean",
+    default: false,
+  })
+  .option("port", {
+    alias: "p",
+    describe: "Port to listen on when running in remote mode (default: 3000)",
+    type: "number",
+    default: 3000,
+  })
   .help()
   .parseSync();
 
@@ -77,6 +90,15 @@ function getAzureDevOpsClient(getAzureDevOpsToken: () => Promise<string>, userAg
 }
 
 async function main() {
+  // Check if we should run in remote mode
+  if (argv.remote) {
+    console.log("Starting Azure DevOps MCP Server in remote mode...");
+    const remoteServer = new RemoteMcpServer(orgName, argv.domains as string[]);
+    await remoteServer.start(argv.port);
+    return;
+  }
+
+  // Run in local stdio mode
   const server = new McpServer({
     name: "Azure DevOps MCP Server",
     version: packageVersion,
