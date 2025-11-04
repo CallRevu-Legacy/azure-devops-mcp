@@ -57,7 +57,7 @@ const argv = yargs(hideBin(process.argv))
   })
   .option("remote", {
     alias: "r",
-    describe: "Run as remote server (HTTP+SSE) instead of local stdio mode",
+    describe: "Run as remote server (Streamable HTTP) instead of local stdio mode",
     type: "boolean",
     default: false,
   })

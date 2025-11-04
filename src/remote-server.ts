@@ -3,8 +3,9 @@
 
 import express, { Request, Response } from "express";
 import cors from "cors";
+import { randomUUID } from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { getBearerHandler, WebApi } from "azure-devops-node-api";
 
 import { PatStorageService } from "./pat-storage.js";
@@ -19,13 +20,13 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Remote MCP server that runs as an HTTP service with SSE transport.
+ * Remote MCP server that runs as an HTTP service with Streamable HTTP transport.
  * Supports user authentication and maps users to their Personal Access Tokens.
  */
 export class RemoteMcpServer {
   private app: express.Application;
   private patStorage: PatStorageService;
-  private transports: Map<string, SSEServerTransport> = new Map();
+  private sessions: Map<string, { transport: StreamableHTTPServerTransport; server: McpServer; userId: string }> = new Map();
   private enabledDomains: Set<string>;
   private orgName: string;
   private orgUrl: string;
@@ -76,7 +77,6 @@ export class RemoteMcpServer {
 
     // Authentication middleware for protected routes
     this.app.use("/mcp", this.authenticateUser.bind(this));
-    this.app.use("/messages", this.authenticateUser.bind(this));
   }
 
   /**
@@ -189,57 +189,50 @@ export class RemoteMcpServer {
       }
     });
 
-    // SSE endpoint for establishing the MCP stream
-    this.app.get("/mcp", async (req: AuthenticatedRequest, res: Response) => {
-      console.log("Establishing SSE connection for user:", req.userId);
+    // MCP endpoint - handles all HTTP methods (GET, POST, DELETE) for Streamable HTTP
+    this.app.all("/mcp", async (req: AuthenticatedRequest, res: Response) => {
+      console.log(`${req.method} /mcp request from user:`, req.userId);
 
       try {
-        const transport = new SSEServerTransport("/messages", res, {
-          allowedOrigins: process.env.ALLOWED_ORIGINS?.split(","),
-        });
+        const sessionId = req.headers["x-session-id"] as string | undefined;
 
-        const sessionId = transport.sessionId;
-        this.transports.set(sessionId, transport);
+        // Check if we have an existing session
+        let sessionInfo = sessionId ? this.sessions.get(sessionId) : undefined;
 
-        transport.onclose = () => {
-          console.log(`SSE transport closed for session ${sessionId}`);
-          this.transports.delete(sessionId);
-        };
+        // If no session or user mismatch, create a new session
+        if (!sessionInfo || sessionInfo.userId !== req.userId) {
+          // Create a new session with a unique session ID
+          const newSessionId = randomUUID();
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => newSessionId,
+            onsessionclosed: async (closedSessionId) => {
+              console.log(`Session closed: ${closedSessionId}`);
+              this.sessions.delete(closedSessionId);
+            },
+            allowedOrigins: process.env.ALLOWED_ORIGINS?.split(","),
+          });
 
-        // Create MCP server instance for this session
-        const server = this.createMcpServerForUser(req.pat!);
-        await server.connect(transport);
+          // Create MCP server instance for this user's session
+          const server = this.createMcpServerForUser(req.pat!);
 
-        console.log(`SSE stream established with session ID: ${sessionId}`);
-      } catch (error) {
-        console.error("Error establishing SSE stream:", error);
-        if (!res.headersSent) {
-          res.status(500).json({ error: "Failed to establish SSE stream" });
+          // Connect the transport to the server
+          await server.connect(transport);
+
+          sessionInfo = {
+            transport,
+            server,
+            userId: req.userId!,
+          };
+          this.sessions.set(newSessionId, sessionInfo);
+          console.log(`Created new session: ${newSessionId} for user: ${req.userId}`);
         }
-      }
-    });
 
-    // POST endpoint for client messages
-    this.app.post("/messages", async (req: AuthenticatedRequest, res: Response) => {
-      const sessionId = req.query.sessionId as string;
-
-      if (!sessionId) {
-        res.status(400).json({ error: "Missing sessionId parameter" });
-        return;
-      }
-
-      const transport = this.transports.get(sessionId);
-      if (!transport) {
-        res.status(404).json({ error: "Session not found" });
-        return;
-      }
-
-      try {
-        await transport.handlePostMessage(req, res);
+        // Handle the request with the transport
+        await sessionInfo.transport.handleRequest(req, res, req.body);
       } catch (error) {
-        console.error("Error handling message:", error);
+        console.error("Error handling MCP request:", error);
         if (!res.headersSent) {
-          res.status(500).json({ error: "Failed to process message" });
+          res.status(500).json({ error: "Failed to process MCP request" });
         }
       }
     });
@@ -314,6 +307,7 @@ export class RemoteMcpServer {
     this.app.listen(port, () => {
       console.log(`Remote MCP server running on port ${port}`);
       console.log(`Organization: ${this.orgName}`);
+      console.log(`Transport: Streamable HTTP`);
       console.log(`Enabled domains: ${Array.from(this.enabledDomains).join(", ")}`);
     });
   }

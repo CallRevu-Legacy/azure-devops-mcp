@@ -4,7 +4,7 @@ This guide explains how to deploy the Azure DevOps MCP server as a remote servic
 
 ## Overview
 
-The remote server mode allows you to run the Azure DevOps MCP server as an HTTP service with Server-Sent Events (SSE) transport. This enables clients to connect to the server remotely without running it locally.
+The remote server mode allows you to run the Azure DevOps MCP server as an HTTP service with Streamable HTTP transport. This enables clients to connect to the server remotely without running it locally.
 
 **Key Security Features:**
 
@@ -206,13 +206,13 @@ curl -X POST https://your-server.azurewebsites.net/api/pat \
 
 ### 2. Connecting to the MCP Server
 
-Configure your MCP client to connect to the remote server:
+Configure your MCP client to connect to the remote server using Streamable HTTP:
 
 ```json
 {
   "servers": {
     "ado-remote": {
-      "type": "sse",
+      "type": "streamable-http",
       "url": "https://your-server.azurewebsites.net/mcp",
       "headers": {
         "Authorization": "Bearer ${ENTRA_TOKEN}"
@@ -221,6 +221,8 @@ Configure your MCP client to connect to the remote server:
   }
 }
 ```
+
+The Streamable HTTP transport provides better performance and reliability compared to SSE, with built-in session management and support for reconnection.
 
 ## Security Considerations
 
@@ -294,21 +296,16 @@ Content-Type: application/json
 }
 ```
 
-### MCP SSE Endpoint
+### MCP Streamable HTTP Endpoint
 
 ```
-GET /mcp
+GET|POST|DELETE /mcp
 Authorization: Bearer {entra-token}
+X-Session-Id: {session-id} (optional, for subsequent requests)
 ```
 
-Establishes the SSE connection for MCP communication.
+Handles all MCP communication using the Streamable HTTP protocol. Supports:
 
-### MCP Messages Endpoint
-
-```
-POST /messages?sessionId={session-id}
-Authorization: Bearer {entra-token}
-Content-Type: application/json
-```
-
-Sends messages to the MCP server.
+- **GET**: Establish streaming connection or resume session
+- **POST**: Send JSON-RPC messages to the server
+- **DELETE**: Close the session
