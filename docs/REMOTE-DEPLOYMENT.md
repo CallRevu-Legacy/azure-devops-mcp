@@ -38,16 +38,13 @@ The following environment variables must be set when running in remote mode:
 
 ### Generating an Encryption Key
 
-You can generate a secure encryption key using the built-in utility:
+You can generate a secure encryption key using the built-in npm script:
 
-```typescript
-import { EncryptionService } from "./src/encryption";
-
-const key = EncryptionService.generateKey();
-console.log("Encryption Key:", key);
+```bash
+npm run generate-key
 ```
 
-Or via command line:
+Or via command line directly:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

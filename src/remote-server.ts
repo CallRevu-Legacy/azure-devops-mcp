@@ -81,7 +81,17 @@ export class RemoteMcpServer {
 
   /**
    * Authenticate user using Bearer token (Entra ID token)
-   * This is a simplified implementation - in production you would validate the JWT token
+   * 
+   * ⚠️ SECURITY WARNING: This is a simplified implementation that decodes JWT tokens
+   * without cryptographic validation. This is vulnerable to token forgery attacks.
+   * 
+   * BEFORE PRODUCTION DEPLOYMENT:
+   * - Implement full JWT signature validation using Microsoft authentication libraries
+   * - Verify token issuer, audience, and expiration
+   * - Validate signing keys against Azure AD's JWKS endpoint
+   * - Consider using @azure/msal-node for proper token validation
+   * 
+   * See: https://learn.microsoft.com/en-us/azure/active-directory/develop/access-tokens
    */
   private async authenticateUser(req: AuthenticatedRequest, res: Response, next: express.NextFunction): Promise<void> {
     const authHeader = req.headers.authorization;
